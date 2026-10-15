@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>JellyFix</title></head><body>
+<div id="JellyFixConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select">
+<div data-role="content"><div class="content-primary"><form id="JellyFixConfigForm">
+<h2>Subtitle priorities</h2>
+<p>Applies to users with subtitle mode set to Always play. Full and hearing-impaired subtitles are both eligible.</p>
+<div class="selectContainer"><label class="selectLabel" for="JellyFixFirstLanguage">Priority 1 — language</label><select is="emby-select" id="JellyFixFirstLanguage" required></select></div>
+<div class="selectContainer"><label class="selectLabel" for="JellyFixSecondLanguage">Priority 2 — language</label><select is="emby-select" id="JellyFixSecondLanguage" required></select></div>
+<div class="selectContainer"><label class="selectLabel" for="JellyFixFallback">Priority 3 — fallback</label><select is="emby-select" id="JellyFixFallback"><option value="any">Any subtitle</option><option value="none">No subtitles</option></select><div class="fieldDescription">Used only when neither preferred language is available.</div></div>
+<h2>Video transcoding</h2><p>These limits apply when video is being re-encoded. Direct play and video-copy/remux stay unrestricted.</p>
+<div class="selectContainer"><label class="selectLabel" for="JellyFixResolution">Maximum resolution</label><select is="emby-select" id="JellyFixResolution"><option value="0">No limit</option><option value="240">240p</option><option value="360">360p</option><option value="480">480p</option><option value="720">720p</option><option value="1080">1080p</option><option value="1440">1440p</option><option value="2160">2160p (4K)</option></select></div>
+<div class="inputContainer"><label class="inputLabel" for="JellyFixBitrate">Maximum bitrate (Mbps)</label><input is="emby-input" type="text" inputmode="decimal" id="JellyFixBitrate" required><div class="fieldDescription">Combined video + audio budget. For example, 1.2. Enter 0 for no bitrate limit. Lower client limits are preserved.</div></div>
+<h2>Browser title</h2>
+<div class="inputContainer"><label class="inputLabel" for="JellyFixTitle">Override title tag</label><input is="emby-input" type="text" id="JellyFixTitle" maxlength="200" placeholder="Leave empty to keep Jellyfin’s titles"><div class="fieldDescription">A fixed title for tabs and new history entries in the server-hosted web client. Reload Jellyfin after changing this. URLs and existing browser history are unchanged.</div></div>
+<p id="JellyFixStatus" role="status" aria-live="polite"></p>
+<button is="emby-button" type="submit" id="JellyFixSave" class="raised button-submit block emby-button"><span>Save</span></button>
+</form></div></div>
+<script>
+(function () {
+    const pluginId='7e0b6e7a-01ab-47af-b681-47d879e1e081';
+    const page=document.querySelector('#JellyFixConfigPage');
+    const field=id=>page.querySelector('#'+id);
+    let loading=false;
+    function addLanguage(select,code,name) {
+        if(!Array.from(select.options).some(o=>o.value===code)) select.add(new Option(name,code));
+    }
+    function fillLanguages(languages,config) {
+        const first=field('JellyFixFirstLanguage'),second=field('JellyFixSecondLanguage');
+        first.replaceChildren();second.replaceChildren();
+        const choices=languages.map(c=>({code:(c.ThreeLetterISOLanguageNames||[])[0]||c.TwoLetterISOLanguageName||c.Name,name:c.DisplayName||c.Name}))
+            .filter(c=>c.code&&c.name).sort((a,b)=>a.name.localeCompare(b.name));
+        for(const c of choices) {addLanguage(first,c.code,c.name);addLanguage(second,c.code,c.name);}
+        const preferred1=config.FirstSubtitleLanguage||'eng',preferred2=config.SecondSubtitleLanguage||'nor';
+        for(const select of [first,second]) {addLanguage(select,'eng','English');addLanguage(select,'nor','Norwegian');}
+        addLanguage(first,preferred1,preferred1);addLanguage(second,preferred2,preferred2);
+        first.value=preferred1;second.value=preferred2;
+    }
+    page.addEventListener('pageshow',async function () {
+        if(loading)return;loading=true;field('JellyFixSave').disabled=true;field('JellyFixStatus').textContent='';
+        Dashboard.showLoadingMsg();
+        try {
+            const config=await ApiClient.getPluginConfiguration(pluginId);
+            let languages=[];
+            try {languages=await ApiClient.getJSON(ApiClient.getUrl('Localization/Cultures'));}
+            catch(e) {field('JellyFixStatus').textContent='Language list unavailable. Saved languages and English/Norwegian remain available.';}
+            fillLanguages(languages,config);
+            field('JellyFixFallback').value=config.UseAnySubtitleFallback===false?'none':'any';
+            field('JellyFixResolution').value=String(config.MaximumTranscodeHeight==null?720:config.MaximumTranscodeHeight);
+            field('JellyFixBitrate').value=String(config.MaximumTranscodeMbps==null?1.2:config.MaximumTranscodeMbps);
+            field('JellyFixTitle').value=config.BrowserTitleOverride||'';
+            field('JellyFixSave').disabled=false;
+        } catch(e) {field('JellyFixStatus').textContent='Could not load JellyFix settings: '+(e.message||e);}
+        finally {loading=false;Dashboard.hideLoadingMsg();}
+    });
+    field('JellyFixConfigForm').addEventListener('submit',async function(e) {
+        e.preventDefault();
+        const input=field('JellyFixBitrate'),text=input.value.trim().replace(',','.');
+        const bitrate=Number(text);
+        if(!/^\d+(\.\d+)?$/.test(text)||!Number.isFinite(bitrate)||bitrate<0||bitrate>1000||(bitrate>0&&bitrate<0.2)) {
+            field('JellyFixStatus').textContent='Enter 0 for unlimited, or a bitrate between 0.2 and 1000 Mbps.';input.focus();return;
+        }
+        field('JellyFixSave').disabled=true;Dashboard.showLoadingMsg();
+        try {
+            const config=await ApiClient.getPluginConfiguration(pluginId);
+            config.FirstSubtitleLanguage=field('JellyFixFirstLanguage').value;
+            config.SecondSubtitleLanguage=field('JellyFixSecondLanguage').value;
+            config.UseAnySubtitleFallback=field('JellyFixFallback').value==='any';
+            config.MaximumTranscodeHeight=Number(field('JellyFixResolution').value);
+            config.MaximumTranscodeMbps=bitrate;
+            config.BrowserTitleOverride=field('JellyFixTitle').value;
+            await ApiClient.updatePluginConfiguration(pluginId,config);
+            field('JellyFixStatus').textContent='Saved. Playback changes apply to new sessions. Reload Jellyfin to apply the browser title.';
+        } catch(e) {field('JellyFixStatus').textContent='Could not save JellyFix settings: '+(e.message||e);}
+        finally {field('JellyFixSave').disabled=false;Dashboard.hideLoadingMsg();}
+    });
+})();
+</script>
+</div></body></html>

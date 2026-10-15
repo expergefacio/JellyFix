@@ -1,0 +1,13 @@
+{
+  "category": "General",
+  "description": "Configurable subtitle priorities, transcoding limits and browser title override. Direct play is unrestricted.",
+  "guid": "7e0b6e7a-01ab-47af-b681-47d879e1e081",
+  "name": "JellyFix",
+  "overview": "Ordered subtitle fallback before playback",
+  "owner": "Local",
+  "targetAbi": "12.2.0.0",
+  "timestamp": "2026-10-15T14:40:00Z",
+  "version": "0.3.0.0",
+  "status": "Active",
+  "autoUpdate": false
+}
