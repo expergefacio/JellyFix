@@ -1,6 +1,10 @@
 # JellyFix 0.3.0 — Jellyfin 12.2
 
-Configurable subtitle priorities, transcoding ceilings, and a fixed browser title. The plugin ID and subtitle defaults are unchanged from prior versions.
+Plugin with some extra settings for JellyFin:
+
+- subtitle selection priority 
+- transcoding limits
+- fixed browser title
 
 ## Install or upgrade
 
